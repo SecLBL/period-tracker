@@ -1,0 +1,8 @@
+# This directory will contain the TensorFlow.js model after training
+# Run: cd ml && python train_model.py
+#
+# Expected files after training:
+# - model.json (model architecture)
+# - group1-shard1of1.bin (model weights)
+# - scaler.json (feature normalization parameters)
+# - training_metrics.json (evaluation metrics)

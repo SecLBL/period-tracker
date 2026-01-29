@@ -9,14 +9,54 @@ interface StatisticsProps {
   statistics: CycleStats;
 }
 
-const SYMPTOM_LABELS: Record<SymptomType, string> = {
-  cramps: 'Krämpfe',
-  headache: 'Kopfschmerzen',
-  mood: 'Stimmung',
-  energy: 'Energie',
-  bloating: 'Blähungen',
-  breast_tenderness: 'Brustspannen',
-  other: 'Sonstiges',
+const SYMPTOM_LABELS: Partial<Record<SymptomType, string>> = {
+  // Blutung
+  bleeding_spotting: 'Schmierblutung',
+  bleeding_light: 'Leichte Blutung',
+  bleeding_heavy: 'Starke Blutung',
+  // Schmerzen
+  pain_cramps: 'Krämpfe',
+  pain_pelvic: 'Unterleibsschmerzen',
+  pain_back: 'Rückenschmerzen',
+  pain_head: 'Kopfschmerzen',
+  pain_ovulation: 'Mittelschmerz',
+  pain_breast: 'Brustspannen',
+  // Körperlich
+  physical_bloating: 'Blähbauch',
+  physical_nausea: 'Übelkeit',
+  physical_acne: 'Hautunreinheiten',
+  physical_digestion: 'Verdauungsprobleme',
+  physical_hot_flashes: 'Hitzewallungen',
+  physical_chills: 'Kältewallungen',
+  physical_water_retention: 'Wassereinlagerungen',
+  physical_dizzy: 'Schwindel',
+  // Stimmung
+  mood_happy: 'Glücklich',
+  mood_calm: 'Ausgeglichen',
+  mood_sensitive: 'Sensibel',
+  mood_sad: 'Traurig',
+  mood_irritable: 'Gereizt',
+  mood_anxious: 'Ängstlich',
+  // Energie
+  energy_high: 'Viel Energie',
+  energy_low: 'Wenig Energie',
+  // Schlaf
+  sleep_good: 'Gut geschlafen',
+  sleep_poor: 'Schlecht geschlafen',
+  sleep_insomnia: 'Schlaflosigkeit',
+  // Appetit
+  appetite_high: 'Viel Appetit',
+  appetite_low: 'Wenig Appetit',
+  appetite_cravings: 'Heißhunger',
+  // Zervixschleim
+  cm_dry: 'Trocken',
+  cm_sticky: 'Klebrig',
+  cm_creamy: 'Cremig',
+  cm_watery: 'Wässrig',
+  cm_eggwhite: 'Spinnbar',
+  // Libido
+  libido_high: 'Hohe Libido',
+  libido_low: 'Niedrige Libido',
 };
 
 export function Statistics({ cycles, symptoms, statistics }: StatisticsProps) {
@@ -57,24 +97,16 @@ export function Statistics({ cycles, symptoms, statistics }: StatisticsProps) {
 
   // Prepare symptom frequency data
   const symptomFrequencyData = useMemo(() => {
-    const counts: Record<SymptomType, number> = {
-      cramps: 0,
-      headache: 0,
-      mood: 0,
-      energy: 0,
-      bloating: 0,
-      breast_tenderness: 0,
-      other: 0,
-    };
+    const counts: Map<SymptomType, number> = new Map();
 
     symptoms.forEach((symptom) => {
-      counts[symptom.symptomType]++;
+      const current = counts.get(symptom.symptomType) || 0;
+      counts.set(symptom.symptomType, current + 1);
     });
 
-    return Object.entries(counts)
-      .filter(([, count]) => count > 0)
+    return Array.from(counts.entries())
       .map(([type, count]) => ({
-        name: SYMPTOM_LABELS[type as SymptomType],
+        name: SYMPTOM_LABELS[type] || type,
         count,
       }))
       .sort((a, b) => b.count - a.count);
