@@ -50,7 +50,7 @@ const SYMPTOM_OPTIONS: SymptomOption[] = [
   { type: 'mood_anxious', label: 'Ängstlich', icon: '😰', category: 'mood' },
 
   // Energie
-  { type: 'energy_high', label: 'bensonders viel Energie', icon: '⚡', category: 'energy', isPositive: true },
+  { type: 'energy_high', label: 'besonders viel Energie', icon: '⚡', category: 'energy', isPositive: true },
   { type: 'energy_low', label: 'besonders wenig Energie', icon: '🪫', category: 'energy' },
 
   // Schlaf

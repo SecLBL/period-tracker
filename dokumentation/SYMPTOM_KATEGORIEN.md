@@ -2,7 +2,7 @@
 
 ## Übersicht
 
-Das System verwendet **9 Kategorien** mit **40 Symptomen**, die biologisch auf die verschiedenen Zyklusphasen abgestimmt sind.
+Das System verwendet **9 Kategorien** mit **38 Symptomen**, die biologisch auf die verschiedenen Zyklusphasen abgestimmt sind.
 
 ---
 
@@ -201,25 +201,44 @@ PERIOD_INDICATOR_SYMPTOMS = [
 
 ---
 
-## Symptom-Gewichtung
+## Hybrid-Algorithmus: Baseline + Lernen
 
-Der Algorithmus gewichtet Symptome nach ihrer **Zuverlässigkeit**:
+Der Algorithmus verwendet einen **zweistufigen Ansatz**:
 
-| Symptom-Typ | Gewichtung | Grund |
-|-------------|------------|-------|
-| `cm_eggwhite` | Sehr hoch | Objektiv messbar, zuverlässig |
-| `cm_watery` | Hoch | Objektiv messbar |
-| `pain_ovulation` | Hoch | Spezifisch für Eisprung |
-| `bleeding_spotting` | Hoch | Direkter Perioden-Vorbote |
-| `physical_bloating` | Mittel | Häufig, aber unspezifisch |
-| `mood_irritable` | Mittel | Subjektiv |
-| `appetite_cravings` | Mittel | Klassisches PMS |
+### Stufe 1: Baseline (sofort aktiv, ohne Lernen)
 
----
+Wissenschaftlich validierte Indikatoren wirken **sofort** ohne vorherige Daten:
 
-## Lern-Algorithmus
+```typescript
+// Fruchtbarkeitsindikatoren (Goldstandard der NFP)
+BASELINE_FERTILITY_INDICATORS = [
+  'cm_eggwhite',      // Spinnbarer Zervixschleim = höchste Fruchtbarkeit
+  'cm_watery',        // Wässriger Schleim = hohe Fruchtbarkeit
+  'pain_ovulation',   // Mittelschmerz = direkter Eisprung-Indikator
+];
 
-Der Algorithmus lernt **personalisierte Muster**:
+// Direkte Perioden-Vorboten
+BASELINE_PERIOD_INDICATORS = [
+  'bleeding_spotting',  // Schmierblutung oft 1-2 Tage vor Periode
+];
+
+// Typische PMS-Symptome (bei ≥2 Symptomen in später Lutealphase)
+BASELINE_PMS_INDICATORS = [
+  'pain_cramps', 'pain_breast', 'physical_bloating',
+  'mood_irritable', 'appetite_cravings'
+];
+```
+
+**Beispiel für neue Nutzerin (Tag 1):**
+```
+Nutzerin trägt "Spinnbarer Zervixschleim" ein
+→ App zeigt SOFORT: "Fruchtbarer Zervixschleim erkannt -
+   dies ist der zuverlässigste Fruchtbarkeitsindikator (Goldstandard der NFP)."
+```
+
+### Stufe 2: Personalisiertes Lernen (ab 2 Zyklen)
+
+Nach ausreichend Daten **verbessert** der Algorithmus die Vorhersagen:
 
 ```
 Beispiel nach 5 Zyklen:
@@ -228,11 +247,43 @@ Nutzerin A:
 ├── PMS beginnt typischerweise 5 Tage vor Periode
 ├── Hauptsymptome: Kopfschmerzen, Blähbauch, Heißhunger
 └── Schmierblutung 1 Tag vor Periode
+    → Vorhersage kann um bis zu ±5 Tage angepasst werden
 
 Nutzerin B:
 ├── PMS beginnt typischerweise 3 Tage vor Periode
 ├── Hauptsymptome: Brustspannen, Stimmungsschwankungen
 └── Keine Schmierblutung
+    → Vorhersage basiert auf individuellen Mustern
 ```
 
-→ Vorhersage wird individuell angepasst!
+---
+
+## Symptom-Gewichtung
+
+| Symptom-Typ | Gewichtung | Stufe | Grund |
+|-------------|------------|-------|-------|
+| `cm_eggwhite` | Sehr hoch | Baseline | Objektiv messbar, wissenschaftlich validiert |
+| `cm_watery` | Hoch | Baseline | Objektiv messbar |
+| `pain_ovulation` | Hoch | Baseline | Spezifisch für Eisprung |
+| `bleeding_spotting` | Hoch | Baseline | Direkter Perioden-Vorbote |
+| `pain_cramps` | Mittel | Baseline | Klassisches PMS |
+| `pain_breast` | Mittel | Baseline | Progesteron-Indikator |
+| `physical_bloating` | Mittel | Baseline | Häufiges PMS-Symptom |
+| `mood_irritable` | Mittel | Lernen | Subjektiv, individuell |
+| `appetite_cravings` | Mittel | Baseline | Klassisches PMS |
+
+---
+
+## Signal-Rückgabe
+
+Der Algorithmus gibt ein `SymptomSignal` zurück mit:
+
+| Feld | Beschreibung |
+|------|-------------|
+| `type` | `fertile_window`, `period_imminent`, `pms_pattern_match`, `ovulation_pattern_match` |
+| `confidence` | `low`, `medium`, `high` |
+| `daysAdjustment` | Anpassung der Vorhersage (-5 bis +5 Tage) |
+| `basedOnCycles` | `0` = Baseline, `>0` = Anzahl gelernter Zyklen |
+| `message` | Menschenlesbare Erklärung |
+
+**Wichtig:** `basedOnCycles: 0` bedeutet, dass die Erkennung auf wissenschaftlichem Vorwissen basiert, nicht auf individuellen Daten.

@@ -264,12 +264,85 @@ model = MLPRegressor(
 
 ---
 
-## 5. Symptom-basierte Anpassung
+## 5. Symptom-basierte Anpassung (HYBRID-ANSATZ)
 
-### 5.1 Symptom-Kategorien für Algorithmus
+Das Symptom-System verwendet einen **zweistufigen Hybrid-Ansatz**:
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                    SYMPTOM-ANALYSE PIPELINE                          │
+├─────────────────────────────────────────────────────────────────────┤
+│                                                                     │
+│  STUFE 1: BASELINE (sofort aktiv, wissenschaftlich validiert)      │
+│  ─────────────────────────────────────────────────────────────      │
+│  • Zervixschleim (cm_eggwhite, cm_watery) → Fruchtbarkeit          │
+│  • Mittelschmerz (pain_ovulation) → Eisprung                        │
+│  • Schmierblutung (bleeding_spotting) → Periode naht               │
+│  • Klassische PMS-Symptome (≥2) → Periode nähert sich              │
+│                                                                     │
+│                              ↓                                      │
+│                                                                     │
+│  STUFE 2: PERSONALISIERTES LERNEN (ab 2+ Zyklen)                   │
+│  ───────────────────────────────────────────────────────           │
+│  • Lerne individuelle Symptom-Muster                                │
+│  • Verbessere Vorhersagen basierend auf persönlicher Historie      │
+│  • Passe Vorhersagen um bis zu ±5 Tage an                          │
+│                                                                     │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+### 5.1 Stufe 1: Baseline-Indikatoren (SOFORT aktiv)
+
+Diese Symptome wirken **ohne vorheriges Lernen** - basierend auf wissenschaftlicher Evidenz:
 
 ```typescript
-// calculations.ts, Zeile 404-423
+// calculations.ts - BASELINE-INDIKATOREN
+
+// Hochzuverlässige Fruchtbarkeitsindikatoren (Goldstandard der NFP)
+BASELINE_FERTILITY_INDICATORS = [
+    'cm_eggwhite',      // Spinnbarer Zervixschleim = höchste Fruchtbarkeit
+    'cm_watery',        // Wässriger Schleim = hohe Fruchtbarkeit
+    'pain_ovulation',   // Mittelschmerz = direkter Eisprung-Indikator
+    'libido_high',      // Hohe Libido um Eisprung = wissenschaftlich belegt
+];
+
+// Direkte Perioden-Vorboten
+BASELINE_PERIOD_INDICATORS = [
+    'bleeding_spotting',  // Schmierblutung oft 1-2 Tage vor Periode
+];
+
+// Typische PMS-Symptome (bei ≥2 Symptomen in später Lutealphase)
+BASELINE_PMS_INDICATORS = [
+    'pain_cramps', 'pain_breast', 'physical_bloating',
+    'mood_irritable', 'appetite_cravings'
+];
+```
+
+**Vorteil:** Neue Nutzerinnen bekommen **sofort** Feedback auf wissenschaftlich validierte Indikatoren!
+
+### 5.2 Severity-Gewichtung (Baseline-PMS)
+
+Stärkere Symptome (Severity ≥ 3) haben mehr Gewicht bei der Konfidenz-Berechnung:
+
+```typescript
+// Baseline-PMS Konfidenz-Berechnung
+const strongPmsSymptoms = pmsSymptoms.filter(s => s.severity >= 3);
+const avgSeverity = pmsSymptoms.reduce((sum, s) => sum + s.severity, 0) / pmsSymptoms.length;
+
+// Konfidenz basierend auf Anzahl UND Stärke
+if (strongPmsSymptoms.length >= 3 || avgSeverity >= 3.5) {
+    confidence = 'high';
+} else if (strongPmsSymptoms.length >= 2 || pmsSymptoms.length >= 3) {
+    confidence = 'medium';
+} else {
+    confidence = 'low';
+}
+```
+
+### 5.3 Stufe 2: Symptom-Kategorien für Lernen
+
+```typescript
+// calculations.ts - LERN-INDIKATOREN (für personalisierte Muster)
 
 // PMS-Indikatoren (1-7 Tage vor Periode)
 PMS_INDICATOR_SYMPTOMS = [
@@ -295,7 +368,7 @@ PERIOD_INDICATOR_SYMPTOMS = [
 ];
 ```
 
-### 5.2 Symptom-Pattern-Learning
+### 5.3 Symptom-Pattern-Learning
 
 Der Algorithmus **lernt aus vergangenen Zyklen** wann welche Symptome auftreten:
 
@@ -380,7 +453,41 @@ function analyzeSymptomSignal(symptoms, cycles, predictedPeriodStart): SymptomSi
 }
 ```
 
-### 5.4 Anpassungs-Logik
+### 5.6 Signal-Kombination (Baseline + Learning)
+
+Wenn **beide** Systeme das gleiche Muster erkennen, wird die Konfidenz erhöht:
+
+```typescript
+function combineSignals(baselineSignal, learnedSignal): SymptomSignal {
+    // Wenn beide den gleichen Typ erkennen → Konfidenz boosten
+    if (baselineSignal.type === learnedSignal.type) {
+        // Konfidenz-Boost:
+        // - Wenn einer 'high' → 'high'
+        // - Wenn beide 'medium' → 'high'
+        // - Sonst → 'medium'
+
+        return {
+            ...learnedSignal,
+            confidence: boostedConfidence,
+            message: `${learnedSignal.message} (Baseline + ${n} Zyklen bestätigt)`
+        };
+    }
+
+    // Unterschiedliche Typen → Priorisierung:
+    // Fruchtbarkeit > Periode naht > PMS
+    return higherPrioritySignal;
+}
+```
+
+**Beispiel:**
+```
+Baseline erkennt: fertile_window (confidence: medium)
+Learning erkennt: fertile_window (confidence: medium)
+                           ↓
+Kombiniert:       fertile_window (confidence: HIGH) ✓
+```
+
+### 5.7 Anpassungs-Logik
 
 ```typescript
 // usePrediction.ts, Zeile 115-125
@@ -502,25 +609,38 @@ Intervall: ±2 Tage (27.-30. Tag)
 │                          ▼                 │                            │
 │               BASIS-VORHERSAGE             │                            │
 │                          │                 │                            │
-│  SCHRITT 3: Symptom-Anpassung              │                            │
-│  ─────────────────────────────             │                            │
+│  SCHRITT 3: Symptom-Anpassung (HYBRID)     │                            │
+│  ──────────────────────────────────────    │                            │
 │                          │◄────────────────┘                            │
 │                          ▼                                              │
 │  ┌───────────────────────────────────────────────────────────────────┐  │
-│  │                    analyzeSymptomSignal()                         │  │
+│  │              analyzeSymptomSignal() - HYBRID-ANSATZ               │  │
 │  │                                                                   │  │
-│  │  1. learnSymptomProfile()                                         │  │
+│  │  STUFE 1: analyzeBaselineSymptomSignal() [SOFORT AKTIV]          │  │
+│  │  ──────────────────────────────────────────────────────          │  │
+│  │     ├── Prüfe Zervixschleim (cm_eggwhite, cm_watery)             │  │
+│  │     │   → Fruchtbarkeit erkannt (Goldstandard NFP)                │  │
+│  │     ├── Prüfe Mittelschmerz (pain_ovulation)                      │  │
+│  │     │   → Eisprung erkannt                                        │  │
+│  │     ├── Prüfe Schmierblutung (bleeding_spotting)                  │  │
+│  │     │   → Periode in 1-2 Tagen                                    │  │
+│  │     └── Prüfe ≥2 klassische PMS-Symptome                          │  │
+│  │         → Periode nähert sich                                     │  │
+│  │                                                                   │  │
+│  │  Falls keine Zyklusdaten → Return Baseline-Signal                 │  │
+│  │                          ↓                                        │  │
+│  │  STUFE 2: learnSymptomProfile() [AB 2+ ZYKLEN]                   │  │
+│  │  ─────────────────────────────────────────────                   │  │
 │  │     ├── Analysiere vergangene Zyklen                              │  │
 │  │     ├── Lerne wann Symptome auftreten                             │  │
 │  │     └── Erstelle persönliches Profil                              │  │
 │  │                                                                   │  │
-│  │  2. Vergleiche aktuelle Symptome mit Profil                       │  │
-│  │     ├── PMS-Muster erkannt?                                       │  │
-│  │     ├── Eisprung-Anzeichen?                                       │  │
-│  │     └── Perioden-Indikatoren?                                     │  │
+│  │  Vergleiche aktuelle Symptome mit Profil                          │  │
+│  │     ├── PMS-Muster erkannt? → Vorhersage anpassen                │  │
+│  │     ├── Eisprung-Anzeichen? → Fruchtbarkeit anzeigen             │  │
+│  │     └── Falls kein Match → Return Baseline-Signal (Fallback)     │  │
 │  │                                                                   │  │
-│  │  3. Berechne Anpassung                                            │  │
-│  │     └── daysAdjustment: -5 bis +5 Tage                            │  │
+│  │  Berechne Anpassung: daysAdjustment: -5 bis +5 Tage              │  │
 │  │                                                                   │  │
 │  └───────────────────────────────────────────────────────────────────┘  │
 │                          │                                              │
@@ -569,7 +689,8 @@ Intervall: ±2 Tage (27.-30. Tag)
 
 1. **Alter/BMI**: Verwendet Default-Werte (keine Eingabe)
 2. **Mindestdaten**: Braucht 7+ Zyklen für ML-Vorhersagen
-3. **Symptom-Learning**: Braucht 2+ analysierte Zyklen
+3. **Symptom-Learning**: Personalisierte Muster brauchen 2+ analysierte Zyklen
+   - **ABER**: Baseline-Indikatoren (Zervixschleim, Mittelschmerz) wirken **sofort**!
 
 ### Genauigkeit (basierend auf FedCycle-Testset)
 

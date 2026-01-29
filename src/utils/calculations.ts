@@ -395,10 +395,192 @@ export function getCycleVariance(cycles: Cycle[], count: number = 6): number {
 }
 
 // ============================================================
-// SYMPTOM-BASED PREDICTION FUNCTIONS (LEARNING-BASED)
+// SYMPTOM-BASED PREDICTION FUNCTIONS (HYBRID: BASELINE + LEARNING)
 // ============================================================
 
 import type { LearnedSymptomPattern, PersonalSymptomProfile } from '../types';
+
+// ============================================================
+// BASELINE BIOLOGICAL INDICATORS (wissenschaftlich validiert)
+// Diese wirken SOFORT ohne vorheriges Lernen
+// ============================================================
+
+// Hochzuverlässige Fruchtbarkeitsindikatoren (Goldstandard der NFP)
+const BASELINE_FERTILITY_INDICATORS: SymptomType[] = [
+  'cm_eggwhite',      // Spinnbarer Zervixschleim = höchste Fruchtbarkeit
+  'cm_watery',        // Wässriger Schleim = hohe Fruchtbarkeit
+  'pain_ovulation',   // Mittelschmerz = direkter Eisprung-Indikator
+  'libido_high',      // Hohe Libido um Eisprung = wissenschaftlich belegt
+];
+
+// Direkte Perioden-Vorboten
+const BASELINE_PERIOD_INDICATORS: SymptomType[] = [
+  'bleeding_spotting',  // Schmierblutung oft 1-2 Tage vor Periode
+];
+
+// Typische PMS-Symptome (wissenschaftlich etabliert)
+const BASELINE_PMS_INDICATORS: SymptomType[] = [
+  'pain_cramps',        // Krämpfe
+  'pain_breast',        // Brustspannen (Progesteron)
+  'physical_bloating',  // Blähbauch
+  'mood_irritable',     // Reizbarkeit
+  'appetite_cravings',  // Heißhunger
+];
+
+/**
+ * Analyze symptoms using BASELINE biological knowledge.
+ * Works immediately without any learning - uses established medical science.
+ * This is the "prior knowledge" that doesn't require historical data.
+ */
+export function analyzeBaselineSymptomSignal(
+  symptoms: Symptom[],
+  cycles: Cycle[],
+  predictedPeriodStart: Date
+): SymptomSignal | null {
+  if (symptoms.length === 0) {
+    return null;
+  }
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  // Get symptoms from the last 3 days (more recent = more relevant for baseline)
+  const recentSymptoms = symptoms.filter(s => {
+    const symptomDate = parseISO(s.date);
+    const daysAgo = differenceInDays(today, symptomDate);
+    return daysAgo >= 0 && daysAgo <= 3;
+  });
+
+  if (recentSymptoms.length === 0) {
+    return null;
+  }
+
+  // Calculate cycle day if we have cycle data
+  let cycleDay = 14; // Default assumption
+  let avgCycleLength = 28;
+
+  if (cycles.length > 0) {
+    const sortedCycles = [...cycles].sort(
+      (a, b) => new Date(b.startDate).getTime() - new Date(a.startDate).getTime()
+    );
+    const lastPeriodStart = parseISO(sortedCycles[0].startDate);
+    cycleDay = getCycleDay(lastPeriodStart);
+    avgCycleLength = getAverageCycleLength(cycles);
+  }
+
+  const daysUntilPeriod = differenceInDays(predictedPeriodStart, today);
+
+  // ========================================
+  // CHECK 1: Fertility indicators (highest priority)
+  // Zervixschleim ist der Goldstandard - sofort reagieren!
+  // ========================================
+  const fertilitySymptoms = recentSymptoms.filter(s =>
+    BASELINE_FERTILITY_INDICATORS.includes(s.symptomType)
+  );
+
+  if (fertilitySymptoms.length > 0) {
+    const hasEggWhite = fertilitySymptoms.some(s => s.symptomType === 'cm_eggwhite');
+    const hasWatery = fertilitySymptoms.some(s => s.symptomType === 'cm_watery');
+    const hasOvulationPain = fertilitySymptoms.some(s => s.symptomType === 'pain_ovulation');
+    const hasHighLibido = fertilitySymptoms.some(s => s.symptomType === 'libido_high');
+
+    // Only trigger if we're in a plausible window (cycle day 8-22)
+    if (cycleDay >= 8 && cycleDay <= 22) {
+      let confidence: 'low' | 'medium' | 'high' = 'medium';
+      let message = '';
+
+      if (hasEggWhite) {
+        confidence = 'high';
+        message = 'Spinnbarer Zervixschleim erkannt - dies ist der zuverlässigste Fruchtbarkeitsindikator (Goldstandard der NFP).';
+      } else if (hasWatery && hasOvulationPain) {
+        confidence = 'high';
+        message = 'Wässriger Zervixschleim und Mittelschmerz erkannt - wahrscheinlich Eisprung.';
+      } else if (hasOvulationPain && hasHighLibido) {
+        confidence = 'high';
+        message = 'Mittelschmerz und hohe Libido erkannt - typische Eisprung-Kombination.';
+      } else if (hasOvulationPain) {
+        confidence = 'medium';
+        message = 'Mittelschmerz erkannt - kann auf Eisprung hindeuten.';
+      } else if (hasWatery) {
+        confidence = 'medium';
+        message = 'Wässriger Zervixschleim erkannt - möglicherweise fruchtbare Phase.';
+      } else if (hasHighLibido) {
+        confidence = 'low';
+        message = 'Hohe Libido erkannt - kann auf fruchtbare Phase hindeuten.';
+      }
+
+      // Only return if we have a meaningful message
+      if (message) {
+        return {
+          type: 'fertile_window',
+          confidence,
+          daysAdjustment: 0,
+          relevantSymptoms: [...new Set(fertilitySymptoms.map(s => s.symptomType))],
+          message,
+          basedOnCycles: 0  // 0 = baseline knowledge, not learned
+        };
+      }
+    }
+  }
+
+  // ========================================
+  // CHECK 2: Period imminent (Schmierblutung in later luteal phase)
+  // ========================================
+  const periodIndicators = recentSymptoms.filter(s =>
+    BASELINE_PERIOD_INDICATORS.includes(s.symptomType)
+  );
+
+  if (periodIndicators.length > 0 && cycleDay > avgCycleLength - 5) {
+    const hasSpotting = periodIndicators.some(s => s.symptomType === 'bleeding_spotting');
+
+    if (hasSpotting) {
+      return {
+        type: 'period_imminent',
+        confidence: 'medium',
+        daysAdjustment: Math.min(0, -daysUntilPeriod + 2), // Period likely in 1-2 days
+        relevantSymptoms: ['bleeding_spotting'],
+        message: 'Schmierblutung erkannt - die Periode beginnt typischerweise in 1-2 Tagen.',
+        basedOnCycles: 0
+      };
+    }
+  }
+
+  // ========================================
+  // CHECK 3: PMS indicators (multiple symptoms in late luteal phase)
+  // Severity-weighted: stronger symptoms (3+) count more
+  // ========================================
+  const pmsSymptoms = recentSymptoms.filter(s =>
+    BASELINE_PMS_INDICATORS.includes(s.symptomType)
+  );
+
+  // Need at least 2 PMS symptoms and be in late luteal phase
+  if (pmsSymptoms.length >= 2 && cycleDay > avgCycleLength - 10) {
+    // Count strong symptoms (severity >= 3) separately
+    const strongPmsSymptoms = pmsSymptoms.filter(s => s.severity >= 3);
+    const avgSeverity = pmsSymptoms.reduce((sum, s) => sum + s.severity, 0) / pmsSymptoms.length;
+
+    // Confidence based on count AND severity
+    let confidence: 'low' | 'medium' | 'high' = 'low';
+    if (strongPmsSymptoms.length >= 3 || (pmsSymptoms.length >= 3 && avgSeverity >= 3.5)) {
+      confidence = 'high';
+    } else if (strongPmsSymptoms.length >= 2 || pmsSymptoms.length >= 3) {
+      confidence = 'medium';
+    }
+
+    const severityNote = avgSeverity >= 3.5 ? ' (ausgeprägt)' : '';
+
+    return {
+      type: 'pms_pattern_match',
+      confidence,
+      daysAdjustment: 0, // Baseline doesn't adjust, only informs
+      relevantSymptoms: [...new Set(pmsSymptoms.map(s => s.symptomType))],
+      message: `${pmsSymptoms.length} typische PMS-Symptome erkannt${severityNote} - die Periode nähert sich möglicherweise.`,
+      basedOnCycles: 0
+    };
+  }
+
+  return null;
+}
 
 // Symptom categories for pattern analysis
 const PMS_INDICATOR_SYMPTOMS: SymptomType[] = [
@@ -518,24 +700,94 @@ export function learnSymptomProfile(symptoms: Symptom[], cycles: Cycle[]): Perso
 }
 
 /**
- * Analyze recent symptoms using learned personal patterns.
- * Returns a signal if current symptoms match historical patterns.
+ * Combine baseline and learned signals when they agree.
+ * Boosts confidence when both sources detect the same pattern.
+ */
+function combineSignals(
+  baselineSignal: SymptomSignal | null,
+  learnedSignal: SymptomSignal | null
+): SymptomSignal | null {
+  // If only one exists, return that one
+  if (!baselineSignal && !learnedSignal) return null;
+  if (!baselineSignal) return learnedSignal;
+  if (!learnedSignal) return baselineSignal;
+
+  // If both detect the same type, boost confidence and combine info
+  if (baselineSignal.type === learnedSignal.type) {
+    // Merge relevant symptoms (unique)
+    const combinedSymptoms = [...new Set([
+      ...baselineSignal.relevantSymptoms,
+      ...learnedSignal.relevantSymptoms
+    ])];
+
+    // Boost confidence: if either is high → high, if both medium → high, otherwise medium
+    let combinedConfidence: 'low' | 'medium' | 'high' = 'medium';
+    if (baselineSignal.confidence === 'high' || learnedSignal.confidence === 'high') {
+      combinedConfidence = 'high';
+    } else if (baselineSignal.confidence === 'medium' && learnedSignal.confidence === 'medium') {
+      combinedConfidence = 'high';
+    }
+
+    // Use learned adjustment (more personalized) but keep learned message
+    return {
+      type: learnedSignal.type,
+      confidence: combinedConfidence,
+      daysAdjustment: learnedSignal.daysAdjustment,
+      relevantSymptoms: combinedSymptoms,
+      message: learnedSignal.basedOnCycles > 0
+        ? `${learnedSignal.message} (Baseline + ${learnedSignal.basedOnCycles} Zyklen bestätigt)`
+        : learnedSignal.message,
+      basedOnCycles: learnedSignal.basedOnCycles
+    };
+  }
+
+  // Different types: prioritize by type importance
+  // Fertility > Period imminent > PMS
+  const priority: Record<SymptomSignal['type'], number> = {
+    'fertile_window': 4,
+    'period_imminent': 3,
+    'ovulation_pattern_match': 2,
+    'pms_pattern_match': 1
+  };
+
+  return priority[baselineSignal.type] >= priority[learnedSignal.type]
+    ? baselineSignal
+    : learnedSignal;
+}
+
+/**
+ * Analyze recent symptoms using HYBRID approach:
+ * 1. First: Check baseline biological indicators (work immediately)
+ * 2. Then: Enhance with learned personal patterns (if available)
+ * 3. Finally: Combine both signals for best accuracy
+ *
+ * This ensures new users get immediate feedback on scientifically-validated
+ * indicators, while experienced users get personalized predictions.
  */
 export function analyzeSymptomSignal(
   symptoms: Symptom[],
   cycles: Cycle[],
   predictedPeriodStart: Date
 ): SymptomSignal | null {
-  if (symptoms.length === 0 || cycles.length === 0) {
+  if (symptoms.length === 0) {
     return null;
+  }
+
+  // STEP 1: Always check baseline biological indicators first
+  // These work without any learning and are scientifically validated
+  const baselineSignal = analyzeBaselineSymptomSignal(symptoms, cycles, predictedPeriodStart);
+
+  // If we don't have enough cycles for learning, return baseline result
+  if (cycles.length === 0) {
+    return baselineSignal;
   }
 
   // Learn personal patterns
   const profile = learnSymptomProfile(symptoms, cycles);
 
-  // If not enough data to learn, return null (no guessing!)
+  // If not enough data to learn, return baseline signal
   if (profile.totalCyclesAnalyzed < 2) {
-    return null;
+    return baselineSignal;
   }
 
   const today = new Date();
@@ -549,7 +801,7 @@ export function analyzeSymptomSignal(
   });
 
   if (recentSymptoms.length === 0) {
-    return null;
+    return baselineSignal;  // Fall back to baseline if no recent symptoms for learning
   }
 
   const daysUntilPeriod = differenceInDays(predictedPeriodStart, today);
@@ -559,6 +811,9 @@ export function analyzeSymptomSignal(
   const lastPeriodStart = parseISO(sortedCycles[0].startDate);
   const cycleDay = getCycleDay(lastPeriodStart);
   const avgCycleLength = getAverageCycleLength(cycles);
+
+  // STEP 2: Check for learned patterns
+  let learnedSignal: SymptomSignal | null = null;
 
   // Check for PMS pattern match
   if (profile.pmsSymptoms.length > 0 && cycleDay > avgCycleLength - 12) {
@@ -589,7 +844,7 @@ export function analyzeSymptomSignal(
       const confidence = matchedPmsSymptoms.length >= 3 ? 'high' :
                         matchedPmsSymptoms.length >= 2 ? 'medium' : 'low';
 
-      return {
+      learnedSignal = {
         type: daysAdjustment < -1 ? 'period_imminent' : 'pms_pattern_match',
         confidence,
         daysAdjustment: Math.max(-5, Math.min(5, daysAdjustment)),  // Clamp adjustment
@@ -600,8 +855,8 @@ export function analyzeSymptomSignal(
     }
   }
 
-  // Check for ovulation pattern match
-  if (profile.ovulationSymptoms.length > 0 && cycleDay >= 8 && cycleDay <= 20) {
+  // Check for ovulation pattern match (only if no PMS signal yet)
+  if (!learnedSignal && profile.ovulationSymptoms.length > 0 && cycleDay >= 8 && cycleDay <= 20) {
     const matchedOvulationSymptoms = recentSymptoms.filter(s =>
       profile.ovulationSymptoms.some(p => p.symptomType === s.symptomType)
     );
@@ -615,7 +870,7 @@ export function analyzeSymptomSignal(
       const confidence = hasFertileMucus ? 'high' :
                         matchedOvulationSymptoms.length >= 2 ? 'medium' : 'low';
 
-      return {
+      learnedSignal = {
         type: hasFertileMucus ? 'fertile_window' : 'ovulation_pattern_match',
         confidence,
         daysAdjustment: 0,  // Ovulation symptoms don't change period prediction
@@ -626,7 +881,8 @@ export function analyzeSymptomSignal(
     }
   }
 
-  return null;
+  // STEP 3: Combine baseline and learned signals for best accuracy
+  return combineSignals(baselineSignal, learnedSignal);
 }
 
 /**
