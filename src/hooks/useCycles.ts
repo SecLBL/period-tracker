@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback } from 'react';
-import type { Cycle, Symptom, Prediction, CycleStats } from '../types';
+import { useState, useEffect, useCallback, useMemo } from 'react';
+import type { Cycle, Symptom, ExtendedPrediction, CycleStats } from '../types';
 import {
   getAllCycles,
   addCycle as dbAddCycle,
@@ -7,10 +7,10 @@ import {
   deleteCycle as dbDeleteCycle,
   getAllSymptoms,
   addSymptom as dbAddSymptom,
-  updateSymptom as dbUpdateSymptom,
   deleteSymptom as dbDeleteSymptom,
 } from '../utils/database';
-import { predictNextPeriod, getCycleStats } from '../utils/calculations';
+import { getCycleStats, sortCyclesByDate } from '../utils/calculations';
+import { usePrediction } from './usePrediction';
 
 export interface UseCyclesReturn {
   cycles: Cycle[];
@@ -21,10 +21,9 @@ export interface UseCyclesReturn {
   updateCycle: (id: number, updates: Partial<Cycle>) => Promise<void>;
   deleteCycle: (id: number) => Promise<void>;
   addSymptom: (symptom: Omit<Symptom, 'id'>) => Promise<void>;
-  updateSymptom: (id: number, updates: Partial<Symptom>) => Promise<void>;
   deleteSymptom: (id: number) => Promise<void>;
   currentCycle: Cycle | null;
-  predictions: Prediction | null;
+  predictions: ExtendedPrediction | null;
   statistics: CycleStats;
   refresh: () => Promise<void>;
 }
@@ -96,16 +95,6 @@ export function useCycles(): UseCyclesReturn {
     }
   }, [loadData]);
 
-  const updateSymptom = useCallback(async (id: number, updates: Partial<Symptom>) => {
-    try {
-      await dbUpdateSymptom(id, updates);
-      await loadData();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to update symptom');
-      throw err;
-    }
-  }, [loadData]);
-
   const deleteSymptom = useCallback(async (id: number) => {
     try {
       await dbDeleteSymptom(id);
@@ -116,18 +105,17 @@ export function useCycles(): UseCyclesReturn {
     }
   }, [loadData]);
 
-  // Get current cycle (most recent)
-  const currentCycle = cycles.length > 0
-    ? cycles.reduce((latest, cycle) =>
-        new Date(cycle.startDate) > new Date(latest.startDate) ? cycle : latest
-      )
-    : null;
+  // Get current cycle (most recent) - memoized
+  const currentCycle = useMemo(() => {
+    if (cycles.length === 0) return null;
+    return sortCyclesByDate(cycles)[0];
+  }, [cycles]);
 
-  // Get predictions
-  const predictions = predictNextPeriod(cycles);
+  // Get predictions using the unified prediction hook (ML + statistical + symptom-based)
+  const { prediction: predictions } = usePrediction(cycles, symptoms);
 
-  // Get statistics
-  const statistics = getCycleStats(cycles);
+  // Get statistics - memoized
+  const statistics = useMemo(() => getCycleStats(cycles), [cycles]);
 
   return {
     cycles,
@@ -138,7 +126,6 @@ export function useCycles(): UseCyclesReturn {
     updateCycle,
     deleteCycle,
     addSymptom,
-    updateSymptom,
     deleteSymptom,
     currentCycle,
     predictions,

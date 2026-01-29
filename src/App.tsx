@@ -65,7 +65,7 @@ function App() {
     <Layout activeTab={activeTab} onTabChange={handleTabChange}>
       {activeTab === 'calendar' && (
         <>
-          <PredictionView cycles={cycles} symptoms={symptoms} />
+          <PredictionView cycles={cycles} symptoms={symptoms} prediction={predictions} />
           <CalendarView
             cycles={cycles}
             symptoms={symptoms}

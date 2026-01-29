@@ -2,6 +2,8 @@ import { useMemo } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
 import { format, parseISO, differenceInDays } from 'date-fns';
 import type { Cycle, Symptom, CycleStats, SymptomType } from '../types';
+import { SYMPTOM_LABELS } from '../constants/symptoms';
+import { sortCyclesByDate } from '../utils/calculations';
 
 interface StatisticsProps {
   cycles: Cycle[];
@@ -9,64 +11,12 @@ interface StatisticsProps {
   statistics: CycleStats;
 }
 
-const SYMPTOM_LABELS: Partial<Record<SymptomType, string>> = {
-  // Blutung
-  bleeding_spotting: 'Schmierblutung',
-  bleeding_light: 'Leichte Blutung',
-  bleeding_heavy: 'Starke Blutung',
-  // Schmerzen
-  pain_cramps: 'Krämpfe',
-  pain_pelvic: 'Unterleibsschmerzen',
-  pain_back: 'Rückenschmerzen',
-  pain_head: 'Kopfschmerzen',
-  pain_ovulation: 'Mittelschmerz',
-  pain_breast: 'Brustspannen',
-  // Körperlich
-  physical_bloating: 'Blähbauch',
-  physical_nausea: 'Übelkeit',
-  physical_acne: 'Hautunreinheiten',
-  physical_digestion: 'Verdauungsprobleme',
-  physical_hot_flashes: 'Hitzewallungen',
-  physical_chills: 'Kältewallungen',
-  physical_water_retention: 'Wassereinlagerungen',
-  physical_dizzy: 'Schwindel',
-  // Stimmung
-  mood_happy: 'Glücklich',
-  mood_calm: 'Ausgeglichen',
-  mood_sensitive: 'Sensibel',
-  mood_sad: 'Traurig',
-  mood_irritable: 'Gereizt',
-  mood_anxious: 'Ängstlich',
-  // Energie
-  energy_high: 'Viel Energie',
-  energy_low: 'Wenig Energie',
-  // Schlaf
-  sleep_good: 'Gut geschlafen',
-  sleep_poor: 'Schlecht geschlafen',
-  sleep_insomnia: 'Schlaflosigkeit',
-  // Appetit
-  appetite_high: 'Viel Appetit',
-  appetite_low: 'Wenig Appetit',
-  appetite_cravings: 'Heißhunger',
-  // Zervixschleim
-  cm_dry: 'Trocken',
-  cm_sticky: 'Klebrig',
-  cm_creamy: 'Cremig',
-  cm_watery: 'Wässrig',
-  cm_eggwhite: 'Spinnbar',
-  // Libido
-  libido_high: 'Hohe Libido',
-  libido_low: 'Niedrige Libido',
-};
-
 export function Statistics({ cycles, symptoms, statistics }: StatisticsProps) {
   // Prepare cycle length data for chart
   const cycleLengthData = useMemo(() => {
     if (cycles.length < 2) return [];
 
-    const sortedCycles = [...cycles].sort(
-      (a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime()
-    );
+    const sortedCycles = sortCyclesByDate(cycles, 'asc');
 
     const data: { name: string; length: number }[] = [];
     for (let i = 1; i < sortedCycles.length; i++) {
@@ -86,13 +36,11 @@ export function Statistics({ cycles, symptoms, statistics }: StatisticsProps) {
 
   // Prepare period length data
   const periodLengthData = useMemo(() => {
-    return cycles
-      .filter((c) => c.endDate)
-      .sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime())
-      .map((cycle) => ({
-        name: format(parseISO(cycle.startDate), 'MM/yy'),
-        length: differenceInDays(parseISO(cycle.endDate!), parseISO(cycle.startDate)) + 1,
-      }));
+    const completedCycles = cycles.filter((c) => c.endDate);
+    return sortCyclesByDate(completedCycles, 'asc').map((cycle) => ({
+      name: format(parseISO(cycle.startDate), 'MM/yy'),
+      length: differenceInDays(parseISO(cycle.endDate!), parseISO(cycle.startDate)) + 1,
+    }));
   }, [cycles]);
 
   // Prepare symptom frequency data

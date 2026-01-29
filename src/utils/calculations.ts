@@ -1,5 +1,16 @@
 import { differenceInDays, addDays, subDays, parseISO } from 'date-fns';
-import type { Cycle, Symptom, Prediction, CycleStats, CyclePhase, PredictionConfidence, CycleTrend, SymptomSignal, SymptomType } from '../types';
+import type { Cycle, Symptom, Prediction, CycleStats, CyclePhase, PredictionConfidence, CycleTrend, SymptomSignal, SymptomType, LearnedSymptomPattern, PersonalSymptomProfile } from '../types';
+
+/**
+ * Sort cycles by start date.
+ * @param order 'desc' for most recent first (default), 'asc' for oldest first
+ */
+export function sortCyclesByDate(cycles: Cycle[], order: 'desc' | 'asc' = 'desc'): Cycle[] {
+  return [...cycles].sort((a, b) => {
+    const diff = new Date(b.startDate).getTime() - new Date(a.startDate).getTime();
+    return order === 'desc' ? diff : -diff;
+  });
+}
 
 export function calculateCycleLength(currentStart: Date, previousStart: Date): number {
   return differenceInDays(currentStart, previousStart);
@@ -82,18 +93,6 @@ export function predictNextPeriod(cycles: Cycle[]): Prediction | null {
     fertileWindowEnd,
     ovulationDate,
   };
-}
-
-export function getFertileWindow(predictedStart: Date): { start: Date; end: Date } {
-  const ovulationDate = subDays(predictedStart, 14);
-  return {
-    start: subDays(ovulationDate, 5),
-    end: addDays(ovulationDate, 1),
-  };
-}
-
-export function getOvulationDate(predictedStart: Date): Date {
-  return subDays(predictedStart, 14);
 }
 
 export function getCycleDay(lastPeriodStart: Date): number {
@@ -397,8 +396,6 @@ export function getCycleVariance(cycles: Cycle[], count: number = 6): number {
 // ============================================================
 // SYMPTOM-BASED PREDICTION FUNCTIONS (HYBRID: BASELINE + LEARNING)
 // ============================================================
-
-import type { LearnedSymptomPattern, PersonalSymptomProfile } from '../types';
 
 // ============================================================
 // BASELINE BIOLOGICAL INDICATORS (wissenschaftlich validiert)

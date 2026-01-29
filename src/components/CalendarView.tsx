@@ -14,12 +14,12 @@ import {
   isWithinInterval,
 } from 'date-fns';
 import { de } from 'date-fns/locale';
-import type { Cycle, Symptom, Prediction } from '../types';
+import type { Cycle, Symptom, ExtendedPrediction } from '../types';
 
 interface CalendarViewProps {
   cycles: Cycle[];
   symptoms: Symptom[];
-  predictions: Prediction | null;
+  predictions: ExtendedPrediction | null;
   onDayClick: (date: Date) => void;
 }
 

@@ -1,12 +1,13 @@
 import { format, differenceInDays, parseISO, addDays } from 'date-fns';
 import { de } from 'date-fns/locale';
-import type { Cycle, Symptom, ExtendedPrediction, CyclePhase, CycleTrend, PredictionSource, SymptomSignal, SymptomType } from '../types';
-import { getCycleDay, getCyclePhase, getAverageCycleLength } from '../utils/calculations';
-import { usePrediction } from '../hooks/usePrediction';
+import type { Cycle, Symptom, ExtendedPrediction, CyclePhase, CycleTrend, PredictionSource, SymptomSignal } from '../types';
+import { getCycleDay, getCyclePhase, getAverageCycleLength, sortCyclesByDate } from '../utils/calculations';
+import { SYMPTOM_LABELS } from '../constants/symptoms';
 
 interface PredictionViewProps {
   cycles: Cycle[];
   symptoms?: Symptom[];
+  prediction: ExtendedPrediction | null;
 }
 
 const PHASE_INFO: Record<CyclePhase, { label: string; color: string; description: string }> = {
@@ -42,56 +43,6 @@ const SOURCE_INFO: Record<PredictionSource, { label: string; description: string
   ml: { label: 'KI', description: 'Machine Learning Vorhersage' },
   statistical: { label: 'Statistik', description: 'Statistische Berechnung' },
   default: { label: 'Standard', description: 'Standardwerte (mehr Daten benötigt)' },
-};
-
-const SYMPTOM_LABELS: Partial<Record<SymptomType, string>> = {
-  // Blutung
-  bleeding_spotting: 'Schmierblutung',
-  bleeding_light: 'Leichte Blutung',
-  bleeding_heavy: 'Starke Blutung',
-  // Schmerzen
-  pain_cramps: 'Krämpfe',
-  pain_pelvic: 'Unterleibsschmerzen',
-  pain_back: 'Rückenschmerzen',
-  pain_head: 'Kopfschmerzen',
-  pain_ovulation: 'Mittelschmerz',
-  pain_breast: 'Brustspannen',
-  // Körperlich
-  physical_bloating: 'Blähbauch',
-  physical_nausea: 'Übelkeit',
-  physical_acne: 'Hautunreinheiten',
-  physical_digestion: 'Verdauungsprobleme',
-  physical_hot_flashes: 'Hitzewallungen',
-  physical_chills: 'Kältewallungen',
-  physical_water_retention: 'Wassereinlagerungen',
-  physical_dizzy: 'Schwindel',
-  // Stimmung
-  mood_happy: 'Glücklich',
-  mood_calm: 'Ausgeglichen',
-  mood_sensitive: 'Sensibel',
-  mood_sad: 'Traurig',
-  mood_irritable: 'Gereizt',
-  mood_anxious: 'Ängstlich',
-  // Energie
-  energy_high: 'Viel Energie',
-  energy_low: 'Wenig Energie',
-  // Schlaf
-  sleep_good: 'Gut geschlafen',
-  sleep_poor: 'Schlecht geschlafen',
-  sleep_insomnia: 'Schlaflosigkeit',
-  // Appetit
-  appetite_high: 'Viel Appetit',
-  appetite_low: 'Wenig Appetit',
-  appetite_cravings: 'Heißhunger',
-  // Zervixschleim
-  cm_dry: 'Trocken',
-  cm_sticky: 'Klebrig',
-  cm_creamy: 'Cremig',
-  cm_watery: 'Wässrig',
-  cm_eggwhite: 'Spinnbar',
-  // Libido
-  libido_high: 'Hohe Libido',
-  libido_low: 'Niedrige Libido',
 };
 
 function ConfidenceBadge({ level }: { level: 'low' | 'medium' | 'high' }) {
@@ -232,18 +183,18 @@ function SymptomSignalCard({ signal }: { signal: SymptomSignal }) {
           )}
 
           {/* Show data basis */}
-          <p className={`text-xs ${config.subtextColor} mt-2 opacity-75`}>
-            Gelernt aus {signal.basedOnCycles} {signal.basedOnCycles === 1 ? 'Zyklus' : 'Zyklen'}
-          </p>
+          {signal.basedOnCycles > 0 && (
+            <p className={`text-xs ${config.subtextColor} mt-2 opacity-75`}>
+              Gelernt aus {signal.basedOnCycles} {signal.basedOnCycles === 1 ? 'Zyklus' : 'Zyklen'}
+            </p>
+          )}
         </div>
       </div>
     </div>
   );
 }
 
-export function PredictionView({ cycles, symptoms = [] }: PredictionViewProps) {
-  const { prediction, loading } = usePrediction(cycles, symptoms);
-
+export function PredictionView({ cycles, symptoms = [], prediction }: PredictionViewProps) {
   if (cycles.length === 0) {
     return (
       <div className="p-4">
@@ -260,9 +211,7 @@ export function PredictionView({ cycles, symptoms = [] }: PredictionViewProps) {
     );
   }
 
-  const sortedCycles = [...cycles].sort(
-    (a, b) => new Date(b.startDate).getTime() - new Date(a.startDate).getTime()
-  );
+  const sortedCycles = sortCyclesByDate(cycles);
   const lastCycle = sortedCycles[0];
   const lastPeriodStart = parseISO(lastCycle.startDate);
 
@@ -353,12 +302,6 @@ export function PredictionView({ cycles, symptoms = [] }: PredictionViewProps) {
               </div>
             )}
           </div>
-
-          {loading && (
-            <div className="mt-2 text-xs text-gray-400">
-              Aktualisiere Vorhersage...
-            </div>
-          )}
         </div>
       )}
 
