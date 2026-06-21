@@ -22,3 +22,11 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Local dev tooling (not shared)
+shell.nix
+flake.nix
+flake.lock
+.envrc
+.direnv
+CLAUDE.md

@@ -6,6 +6,7 @@ import { SymptomTracker } from './components/SymptomTracker';
 import { PredictionView } from './components/PredictionView';
 import { Statistics } from './components/Statistics';
 import { ExportImport } from './components/ExportImport';
+import { StorageWarning } from './components/StorageWarning';
 import { useCycles } from './hooks/useCycles';
 
 function App() {
@@ -63,6 +64,8 @@ function App() {
 
   return (
     <Layout activeTab={activeTab} onTabChange={handleTabChange}>
+      <StorageWarning onGoToExport={() => setActiveTab('settings')} />
+
       {activeTab === 'calendar' && (
         <>
           <PredictionView cycles={cycles} symptoms={symptoms} prediction={predictions} />

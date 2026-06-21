@@ -13,6 +13,51 @@ db.version(1).stores({
   settings: 'key'
 });
 
+/**
+ * Request persistent storage so the browser does not evict our IndexedDB
+ * data under storage pressure (the cause of "data deletes itself" on devices
+ * with nearly-full storage, e.g. Android Chrome PWAs).
+ *
+ * Without this, IndexedDB is "best-effort" and may be cleared automatically
+ * when the device runs low on space. With persistence granted, data is only
+ * removed by an explicit user action.
+ *
+ * Safe to call repeatedly; returns the resulting persistence state.
+ */
+export async function ensurePersistentStorage(): Promise<{
+  persisted: boolean;
+  supported: boolean;
+}> {
+  if (!('storage' in navigator) || !navigator.storage?.persist) {
+    return { persisted: false, supported: false };
+  }
+  try {
+    // If already persisted, don't re-prompt.
+    if (await navigator.storage.persisted()) {
+      return { persisted: true, supported: true };
+    }
+    const persisted = await navigator.storage.persist();
+    return { persisted, supported: true };
+  } catch {
+    return { persisted: false, supported: true };
+  }
+}
+
+/**
+ * Returns storage usage info, useful for warning the user before data loss
+ * becomes likely. Values are in bytes; `quota` may be undefined if unsupported.
+ */
+export async function getStorageEstimate(): Promise<StorageEstimate | null> {
+  if (!('storage' in navigator) || !navigator.storage?.estimate) {
+    return null;
+  }
+  try {
+    return await navigator.storage.estimate();
+  } catch {
+    return null;
+  }
+}
+
 // Cycle Operations
 export async function addCycle(cycle: Omit<Cycle, 'id'>): Promise<number> {
   const id = await db.cycles.add(cycle as Cycle);
